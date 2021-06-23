@@ -3,7 +3,13 @@ package com.tecforte.blog.web.rest;
 import com.tecforte.blog.service.BlogService;
 import com.tecforte.blog.web.rest.errors.BadRequestAlertException;
 import com.tecforte.blog.service.dto.BlogDTO;
+import com.tecforte.blog.service.dto.EntryDTO;
 
+import com.tecforte.blog.service.EntryService;
+import org.apache.commons.lang3.StringUtils;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import io.github.jhipster.web.util.HeaderUtil;
 import io.github.jhipster.web.util.ResponseUtil;
 import org.slf4j.Logger;
@@ -18,6 +24,7 @@ import java.net.URISyntaxException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for managing {@link com.tecforte.blog.domain.Blog}.
@@ -34,16 +41,20 @@ public class BlogResource {
     private String applicationName;
 
     private final BlogService blogService;
+    private final EntryService entryService;
 
-    public BlogResource(BlogService blogService) {
+    public BlogResource(BlogService blogService, EntryService entryService) {
         this.blogService = blogService;
+        this.entryService = entryService;
     }
 
     /**
      * {@code POST  /blogs} : Create a new blog.
      *
      * @param blogDTO the blogDTO to create.
-     * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with body the new blogDTO, or with status {@code 400 (Bad Request)} if the blog has already an ID.
+     * @return the {@link ResponseEntity} with status {@code 201 (Created)} and with
+     *         body the new blogDTO, or with status {@code 400 (Bad Request)} if the
+     *         blog has already an ID.
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PostMapping("/blogs")
@@ -53,18 +64,21 @@ public class BlogResource {
             throw new BadRequestAlertException("A new blog cannot already have an ID", ENTITY_NAME, "idexists");
         }
         BlogDTO result = blogService.save(blogDTO);
-        return ResponseEntity.created(new URI("/api/blogs/" + result.getId()))
-            .headers(HeaderUtil.createEntityCreationAlert(applicationName, false, ENTITY_NAME, result.getId().toString()))
-            .body(result);
+        return ResponseEntity
+                .created(new URI("/api/blogs/" + result.getId())).headers(HeaderUtil
+                        .createEntityCreationAlert(applicationName, false, ENTITY_NAME, result.getId().toString()))
+                .body(result);
     }
 
     /**
      * {@code PUT  /blogs} : Updates an existing blog.
      *
      * @param blogDTO the blogDTO to update.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the updated blogDTO,
-     * or with status {@code 400 (Bad Request)} if the blogDTO is not valid,
-     * or with status {@code 500 (Internal Server Error)} if the blogDTO couldn't be updated.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body
+     *         the updated blogDTO, or with status {@code 400 (Bad Request)} if the
+     *         blogDTO is not valid, or with status
+     *         {@code 500 (Internal Server Error)} if the blogDTO couldn't be
+     *         updated.
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PutMapping("/blogs")
@@ -74,16 +88,17 @@ public class BlogResource {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
         BlogDTO result = blogService.save(blogDTO);
-        return ResponseEntity.ok()
-            .headers(HeaderUtil.createEntityUpdateAlert(applicationName, false, ENTITY_NAME, blogDTO.getId().toString()))
-            .body(result);
+        return ResponseEntity.ok().headers(
+                HeaderUtil.createEntityUpdateAlert(applicationName, false, ENTITY_NAME, blogDTO.getId().toString()))
+                .body(result);
     }
 
     /**
      * {@code GET  /blogs} : get all the blogs.
      *
-
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list of blogs in body.
+     * 
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and the list
+     *         of blogs in body.
      */
     @GetMapping("/blogs")
     public List<BlogDTO> getAllBlogs() {
@@ -95,7 +110,8 @@ public class BlogResource {
      * {@code GET  /blogs/:id} : get the "id" blog.
      *
      * @param id the id of the blogDTO to retrieve.
-     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body the blogDTO, or with status {@code 404 (Not Found)}.
+     * @return the {@link ResponseEntity} with status {@code 200 (OK)} and with body
+     *         the blogDTO, or with status {@code 404 (Not Found)}.
      */
     @GetMapping("/blogs/{id}")
     public ResponseEntity<BlogDTO> getBlog(@PathVariable Long id) {
@@ -114,6 +130,43 @@ public class BlogResource {
     public ResponseEntity<Void> deleteBlog(@PathVariable Long id) {
         log.debug("REST request to delete Blog : {}", id);
         blogService.delete(id);
-        return ResponseEntity.noContent().headers(HeaderUtil.createEntityDeletionAlert(applicationName, false, ENTITY_NAME, id.toString())).build();
+        return ResponseEntity.noContent()
+                .headers(HeaderUtil.createEntityDeletionAlert(applicationName, false, ENTITY_NAME, id.toString()))
+                .build();
     }
+
+    @DeleteMapping("/blogs/clean")
+    public ResponseEntity<Void> cleanBlogs(@Valid @RequestBody String[] keywords, Pageable pageable) {
+        log.debug("REST request to delete Blog : {}", keywords[0]);
+        Page<EntryDTO> page = entryService.findAll(pageable);
+        for (EntryDTO entry : page.getContent()) {
+            for (String keyword : keywords) {
+                if (entry.getTitle().toLowerCase().contains(keyword.toLowerCase())
+                        || entry.getContent().toLowerCase().contains(keyword.toLowerCase())) {
+                    entryService.delete(entry.getId());
+                }
+            }
+        }
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/blogs/{id}/clean")
+    public ResponseEntity<Void> cleanBlog(@PathVariable Long id, @Valid @RequestBody String[] keywords,
+            Pageable pageable) {
+        log.debug("REST request to clean Blog id : {}", id);
+        log.debug("REST request to clean Blog : {}", keywords[0]);
+        Page<EntryDTO> page = entryService.findAll(pageable);
+        List<EntryDTO> blogEntries = (page.getContent()).stream().filter(e -> e.getBlogId().equals(id)).collect(Collectors.toList());
+        log.debug("REST request to clean Blog : {}", blogEntries.size());
+        for (EntryDTO entry : blogEntries) {
+            for (String keyword : keywords) {
+                if (entry.getTitle().toLowerCase().contains(keyword.toLowerCase())
+                        || entry.getContent().toLowerCase().contains(keyword.toLowerCase())) {
+                    entryService.delete(entry.getId());
+                }
+            }
+        }
+        return ResponseEntity.ok().build();
+    }
+
 }
